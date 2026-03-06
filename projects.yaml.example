@@ -1,0 +1,47 @@
+# DevPulse project configuration
+# Copy this file to projects.yaml and customize for your projects.
+#
+# Each project can have:
+#   path:         Local git repo path (supports ~)
+#   display_name: Human-readable name
+#   branch:       Expected branch name (informational)
+#   ado_epic:     Azure DevOps Epic ID (optional)
+#   ado_ticket:   Azure DevOps Ticket ID (optional)
+#   test_cmd:     Command to run tests (optional)
+#   phases:       List of project phases with status tracking
+
+projects:
+  my_project:
+    path: ~/Projects/my-project
+    display_name: My Project
+    test_cmd: "python -m pytest tests/ -q"
+    phases:
+      - name: Core Features
+        status: complete
+      - name: API Integration
+        status: in_progress
+        tasks:
+          - "Implement REST endpoints"
+          - "Add authentication"
+      - name: Documentation
+        status: not_started
+
+  another_project:
+    path: ~/Projects/another-project
+    display_name: Another Project
+    ado_epic: 12345
+    phases:
+      - name: Build & Test
+        status: complete
+      - name: Deploy
+        status: blocked
+        blocker: "Waiting for staging environment access"
+
+  standalone_project:
+    display_name: Standalone Tracker
+    ado_ticket: 67890
+    phases:
+      - name: Phase 1
+        status: in_progress
+      - name: Phase 2
+        status: not_started
