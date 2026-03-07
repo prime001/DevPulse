@@ -3,7 +3,6 @@
 from datetime import datetime
 
 from rich.console import Console
-from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -162,27 +161,7 @@ def _build_blockers_section(blockers):
     return Text.from_markup("\n".join(lines))
 
 
-def _build_pr_section(ado_data):
-    """Build the PR ALERTS section."""
-    pr_alerts = ado_data.get("pr_alerts", [])
-    stale = ado_data.get("stale_prs", 0)
-
-    if not pr_alerts and not stale:
-        return Text("  (connect ADO Analyzer for PR data)", style="dim italic")
-
-    lines = []
-    for alert in pr_alerts[:5]:
-        lines.append(f"  [yellow]{alert}[/yellow]")
-
-    if stale:
-        lines.append(f"  [dim]{stale} stale PR(s) detected[/dim]")
-
-    return Text.from_markup("\n".join(lines)) if lines else Text(
-        "  (connect ADO Analyzer for PR data)", style="dim italic"
-    )
-
-
-def render_dashboard(config, git_results, phase_results, blockers, tasks, ado_data, focus_items):
+def render_dashboard(config, git_results, phase_results, blockers, tasks, focus_items):
     """Render the full DevPulse dashboard to the terminal."""
     console = Console()
 
@@ -238,22 +217,14 @@ def render_dashboard(config, git_results, phase_results, blockers, tasks, ado_da
         )
     )
 
-    # Two-column layout: BLOCKERS + PR ALERTS
+    # BLOCKERS
     blockers_content = _build_blockers_section(blockers)
-    pr_content = _build_pr_section(ado_data)
-
-    blockers_panel = Panel(
-        blockers_content,
-        title="[bold bright_white]BLOCKERS[/bold bright_white]",
-        border_style="red",
-        expand=True,
+    console.print(
+        Panel(
+            blockers_content,
+            title="[bold bright_white]BLOCKERS[/bold bright_white]",
+            border_style="red",
+            expand=True,
+        )
     )
-    pr_panel = Panel(
-        pr_content,
-        title="[bold bright_white]PR ALERTS[/bold bright_white]",
-        border_style="yellow",
-        expand=True,
-    )
-
-    console.print(Columns([blockers_panel, pr_panel], expand=True, equal=True))
     console.print()

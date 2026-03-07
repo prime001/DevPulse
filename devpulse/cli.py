@@ -11,11 +11,7 @@ def _gather_data():
     """Collect all data needed by dashboard/motd/prioritizer.
 
     Returns a tuple of (config, git_results, phase_results, blockers, tasks,
-    ado_data, focus_items).
-
-    git_results is a dict keyed by project name.
-    phase_results is a dict keyed by project name with keys:
-        percentage, total, complete, in_progress, blocked, not_started.
+    focus_items).
     """
     from devpulse.config import load_projects
     from devpulse.git_scanner import scan_all
@@ -25,7 +21,6 @@ def _gather_data():
         extract_tasks,
         get_phase_counts,
     )
-    from devpulse.ado_bridge import load_ado_data
     from devpulse.prioritizer import prioritize
 
     config = load_projects()
@@ -52,10 +47,9 @@ def _gather_data():
 
     blockers = extract_blockers(config)
     tasks = extract_tasks(config)
-    ado_data = load_ado_data()
-    focus_items = prioritize(phase_results, ado_data, git_results, config)
+    focus_items = prioritize(phase_results, git_results, config)
 
-    return config, git_results, phase_results, blockers, tasks, ado_data, focus_items
+    return config, git_results, phase_results, blockers, tasks, focus_items
 
 
 @click.group(invoke_without_command=True)
@@ -74,7 +68,7 @@ def dashboard():
     """Launch the full Rich TUI dashboard."""
     from devpulse.dashboard import render_dashboard
 
-    config, git_results, phase_results, blockers, tasks, ado_data, focus_items = (
+    config, git_results, phase_results, blockers, tasks, focus_items = (
         _gather_data()
     )
 
@@ -84,7 +78,6 @@ def dashboard():
         phase_results=phase_results,
         blockers=blockers,
         tasks=tasks,
-        ado_data=ado_data,
         focus_items=focus_items,
     )
 
@@ -94,7 +87,7 @@ def brief():
     """Show compact MOTD summary (8-10 lines)."""
     from devpulse.motd import render_motd
 
-    config, git_results, phase_results, blockers, tasks, ado_data, focus_items = (
+    config, git_results, phase_results, blockers, tasks, focus_items = (
         _gather_data()
     )
 
@@ -102,7 +95,6 @@ def brief():
         config=config,
         blockers=blockers,
         tasks=tasks,
-        ado_data=ado_data,
         focus_items=focus_items,
     )
 
@@ -235,20 +227,6 @@ def phases():
     console.print()
     console.print(table)
     console.print()
-
-
-@cli.command()
-def refresh():
-    """Refresh cached ADO data."""
-    from rich.console import Console
-
-    console = Console()
-    console.print("[yellow]Refreshing ADO cache...[/yellow]")
-    # Placeholder for ADO cache refresh logic
-    console.print(
-        "[dim]ADO cache refresh not yet implemented. "
-        "Connect ADO Analyzer for live data.[/dim]"
-    )
 
 
 @cli.command()
