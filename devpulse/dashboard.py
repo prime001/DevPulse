@@ -1,6 +1,8 @@
 """DevPulse Full Rich TUI Dashboard."""
 
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -161,6 +163,76 @@ def _build_blockers_section(blockers):
     return Text.from_markup("\n".join(lines))
 
 
+def _build_metrics_section():
+    """Build the METRICS section with subscriber counts and other stats."""
+    lines = []
+
+    # Book subscribers
+    book_db = Path("/opt/erik_anderson_book_web/backend/subscribers.db")
+    if book_db.exists():
+        try:
+            conn = sqlite3.connect(str(book_db))
+            c = conn.cursor()
+            total = c.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0]
+            today = datetime.now().strftime("%Y-%m-%d")
+            today_count = c.execute(
+                "SELECT COUNT(*) FROM subscribers WHERE subscribed_at LIKE ?",
+                (f"{today}%",),
+            ).fetchone()[0]
+            week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            week_count = c.execute(
+                "SELECT COUNT(*) FROM subscribers WHERE subscribed_at >= ?",
+                (week_ago,),
+            ).fetchone()[0]
+            latest = c.execute(
+                "SELECT first_name, subscribed_at FROM subscribers ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            conn.close()
+
+            lines.append(
+                f"  [bold yellow]Book Subscribers:[/bold yellow]  "
+                f"[bold white]{total}[/bold white] total  |  "
+                f"[green]+{week_count}[/green] this week  |  "
+                f"[cyan]+{today_count}[/cyan] today"
+            )
+            if latest:
+                name = latest[0] or "Anonymous"
+                when = latest[1] or ""
+                if "T" in when:
+                    when = when.split("T")[0]
+                lines.append(
+                    f"  [dim]Latest: {name} ({when})[/dim]"
+                )
+        except Exception:
+            lines.append("  [dim]Book subscribers: error reading DB[/dim]")
+    else:
+        lines.append("  [dim]Book subscribers: no database found[/dim]")
+
+    # Twitter bot stats
+    twitter_db = Path("/opt/twitter/primetweet.db")
+    if twitter_db.exists():
+        try:
+            conn = sqlite3.connect(str(twitter_db))
+            c = conn.cursor()
+            month = datetime.now().strftime("%Y-%m")
+            row = c.execute(
+                "SELECT count FROM tweet_counter WHERE month = ?", (month,)
+            ).fetchone()
+            tweets_this_month = row[0] if row else 0
+            conn.close()
+            lines.append(
+                f"  [bold yellow]Tweets This Month:[/bold yellow]  "
+                f"[bold white]{tweets_this_month}[/bold white]"
+            )
+        except Exception:
+            pass
+
+    if not lines:
+        return Text("  No metrics available.", style="dim")
+
+    return Text.from_markup("\n".join(lines))
+
+
 def render_dashboard(config, git_results, phase_results, blockers, tasks, focus_items):
     """Render the full DevPulse dashboard to the terminal."""
     console = Console()
@@ -180,6 +252,17 @@ def render_dashboard(config, git_results, phase_results, blockers, tasks, focus_
         Panel(
             Text.from_markup(f"[bold bright_white]{header_text}[/bold bright_white]"),
             border_style="bright_blue",
+            expand=True,
+        )
+    )
+
+    # METRICS
+    metrics_content = _build_metrics_section()
+    console.print(
+        Panel(
+            metrics_content,
+            title="[bold bright_white]METRICS[/bold bright_white]",
+            border_style="yellow",
             expand=True,
         )
     )
