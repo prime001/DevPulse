@@ -241,12 +241,56 @@ def collect_gsc():
 
 
 def collect_youtube():
-    """Collect YouTube metrics (if readonly scope available)."""
+    """Collect YouTube metrics via the YouTube Data API."""
     logger.info("Collecting YouTube metrics...")
-    # YouTube readonly scope not available yet — skip for now
-    # TODO: add readonly scope to YouTube OAuth token
-    store("youtube", "note", 0, "readonly scope not configured yet")
-    logger.info("  YouTube: skipped (readonly scope needed)")
+    try:
+        sys.path.insert(0, "/opt/YouTubeShorts")
+        from modules.uploader import get_youtube_credentials
+        from googleapiclient.discovery import build as yt_build
+
+        creds = get_youtube_credentials()
+        if not creds:
+            logger.warning("  YouTube: no valid credentials")
+            store("youtube", "note", 0, "credentials unavailable")
+            return
+
+        youtube = yt_build("youtube", "v3", credentials=creds)
+
+        # Channel stats
+        channels = youtube.channels().list(part="statistics", mine=True).execute()
+        if not channels.get("items"):
+            logger.warning("  YouTube: no channel found")
+            return
+
+        stats = channels["items"][0]["statistics"]
+        subs = int(stats.get("subscriberCount", 0))
+        views = int(stats.get("viewCount", 0))
+        videos = int(stats.get("videoCount", 0))
+
+        store("youtube", "subscribers", subs)
+        store("youtube", "total_views", views)
+        store("youtube", "videos", videos)
+
+        # Get last 10 Shorts performance
+        search = youtube.search().list(
+            part="snippet", channelId=channels["items"][0]["id"],
+            order="date", maxResults=10, type="video",
+        ).execute()
+        video_ids = [item["id"]["videoId"] for item in search.get("items", [])]
+
+        if video_ids:
+            vids = youtube.videos().list(
+                part="statistics", id=",".join(video_ids),
+            ).execute()
+            recent_views = sum(int(v["statistics"].get("viewCount", 0)) for v in vids.get("items", []))
+            recent_likes = sum(int(v["statistics"].get("likeCount", 0)) for v in vids.get("items", []))
+            store("youtube", "recent_10_views", recent_views)
+            store("youtube", "recent_10_likes", recent_likes)
+
+        logger.info(f"  YouTube: {subs} subs, {views} total views, {videos} videos")
+    except Exception as e:
+        logger.error(f"  YouTube failed: {e}")
+        store("youtube", "note", 0, str(e)[:200])
 
 
 # ── Report ──────────────────────────────────────────────────────────
@@ -265,6 +309,11 @@ def generate_report():
         ("HumanRail Orgs", "humanrail", "organizations"),
         ("GSC Total Impressions", "gsc", "total_impressions"),
         ("GSC Total Clicks", "gsc", "total_clicks"),
+        ("YouTube Subscribers", "youtube", "subscribers"),
+        ("YouTube Total Views", "youtube", "total_views"),
+        ("YouTube Videos", "youtube", "videos"),
+        ("YouTube Recent 10 Views", "youtube", "recent_10_views"),
+        ("YouTube Recent 10 Likes", "youtube", "recent_10_likes"),
     ]
 
     lines = []
