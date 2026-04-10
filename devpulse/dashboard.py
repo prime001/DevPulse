@@ -1,9 +1,10 @@
 """DevPulse Full Rich TUI Dashboard."""
 
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from rich.console import Console
-from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -162,27 +163,77 @@ def _build_blockers_section(blockers):
     return Text.from_markup("\n".join(lines))
 
 
-def _build_pr_section(ado_data):
-    """Build the PR ALERTS section."""
-    pr_alerts = ado_data.get("pr_alerts", [])
-    stale = ado_data.get("stale_prs", 0)
-
-    if not pr_alerts and not stale:
-        return Text("  (connect ADO Analyzer for PR data)", style="dim italic")
-
+def _build_metrics_section():
+    """Build the METRICS section with subscriber counts and other stats."""
     lines = []
-    for alert in pr_alerts[:5]:
-        lines.append(f"  [yellow]{alert}[/yellow]")
 
-    if stale:
-        lines.append(f"  [dim]{stale} stale PR(s) detected[/dim]")
+    # Book subscribers
+    book_db = Path("/opt/erik_anderson_book_web/backend/subscribers.db")
+    if book_db.exists():
+        try:
+            conn = sqlite3.connect(str(book_db))
+            c = conn.cursor()
+            total = c.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0]
+            today = datetime.now().strftime("%Y-%m-%d")
+            today_count = c.execute(
+                "SELECT COUNT(*) FROM subscribers WHERE subscribed_at LIKE ?",
+                (f"{today}%",),
+            ).fetchone()[0]
+            week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            week_count = c.execute(
+                "SELECT COUNT(*) FROM subscribers WHERE subscribed_at >= ?",
+                (week_ago,),
+            ).fetchone()[0]
+            latest = c.execute(
+                "SELECT first_name, subscribed_at FROM subscribers ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            conn.close()
 
-    return Text.from_markup("\n".join(lines)) if lines else Text(
-        "  (connect ADO Analyzer for PR data)", style="dim italic"
-    )
+            lines.append(
+                f"  [bold yellow]Book Subscribers:[/bold yellow]  "
+                f"[bold white]{total}[/bold white] total  |  "
+                f"[green]+{week_count}[/green] this week  |  "
+                f"[cyan]+{today_count}[/cyan] today"
+            )
+            if latest:
+                name = latest[0] or "Anonymous"
+                when = latest[1] or ""
+                if "T" in when:
+                    when = when.split("T")[0]
+                lines.append(
+                    f"  [dim]Latest: {name} ({when})[/dim]"
+                )
+        except Exception:
+            lines.append("  [dim]Book subscribers: error reading DB[/dim]")
+    else:
+        lines.append("  [dim]Book subscribers: no database found[/dim]")
+
+    # Twitter bot stats
+    twitter_db = Path("/opt/twitter/primetweet.db")
+    if twitter_db.exists():
+        try:
+            conn = sqlite3.connect(str(twitter_db))
+            c = conn.cursor()
+            month = datetime.now().strftime("%Y-%m")
+            row = c.execute(
+                "SELECT count FROM tweet_counter WHERE month = ?", (month,)
+            ).fetchone()
+            tweets_this_month = row[0] if row else 0
+            conn.close()
+            lines.append(
+                f"  [bold yellow]Tweets This Month:[/bold yellow]  "
+                f"[bold white]{tweets_this_month}[/bold white]"
+            )
+        except Exception:
+            pass
+
+    if not lines:
+        return Text("  No metrics available.", style="dim")
+
+    return Text.from_markup("\n".join(lines))
 
 
-def render_dashboard(config, git_results, phase_results, blockers, tasks, ado_data, focus_items):
+def render_dashboard(config, git_results, phase_results, blockers, tasks, focus_items):
     """Render the full DevPulse dashboard to the terminal."""
     console = Console()
 
@@ -201,6 +252,17 @@ def render_dashboard(config, git_results, phase_results, blockers, tasks, ado_da
         Panel(
             Text.from_markup(f"[bold bright_white]{header_text}[/bold bright_white]"),
             border_style="bright_blue",
+            expand=True,
+        )
+    )
+
+    # METRICS
+    metrics_content = _build_metrics_section()
+    console.print(
+        Panel(
+            metrics_content,
+            title="[bold bright_white]METRICS[/bold bright_white]",
+            border_style="yellow",
             expand=True,
         )
     )
@@ -238,22 +300,14 @@ def render_dashboard(config, git_results, phase_results, blockers, tasks, ado_da
         )
     )
 
-    # Two-column layout: BLOCKERS + PR ALERTS
+    # BLOCKERS
     blockers_content = _build_blockers_section(blockers)
-    pr_content = _build_pr_section(ado_data)
-
-    blockers_panel = Panel(
-        blockers_content,
-        title="[bold bright_white]BLOCKERS[/bold bright_white]",
-        border_style="red",
-        expand=True,
+    console.print(
+        Panel(
+            blockers_content,
+            title="[bold bright_white]BLOCKERS[/bold bright_white]",
+            border_style="red",
+            expand=True,
+        )
     )
-    pr_panel = Panel(
-        pr_content,
-        title="[bold bright_white]PR ALERTS[/bold bright_white]",
-        border_style="yellow",
-        expand=True,
-    )
-
-    console.print(Columns([blockers_panel, pr_panel], expand=True, equal=True))
     console.print()

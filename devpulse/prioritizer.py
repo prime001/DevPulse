@@ -1,20 +1,14 @@
 """DevPulse Cross-Project Prioritizer — Ranked 'what to do next' engine."""
 
 
-def prioritize(phase_results, ado_data, git_results, config):
+def prioritize(phase_results, git_results, config):
     """Generate a ranked list of prioritized action items.
 
     Priority order:
         1. Blockers to unblock
-        2. Quick closes (Resolved tickets, approved PRs, unpushed branches)
+        2. Quick closes (unpushed branches, dirty repos)
         3. In-progress tasks from projects.yaml
         4. Not-started phases
-
-    Args:
-        phase_results: dict[project_name, progress_dict] from phase_tracker
-        ado_data: dict from ado_bridge (focus_items, pr_alerts, stale_prs)
-        git_results: dict[project_name, scan_result] from git_scanner
-        config: full config dict with 'projects' key
 
     Returns:
         List of dicts with keys: text, source, priority_reason
@@ -38,7 +32,7 @@ def prioritize(phase_results, ado_data, git_results, config):
     # --- Priority 2: Quick closes ---
     # Unpushed branches
     for name, scan in git_results.items():
-        if scan is None:
+        if scan is None or scan.get("error"):
             continue
         display = projects.get(name, {}).get("display_name", name)
         unpushed = scan.get("unpushed", 0)
@@ -52,7 +46,7 @@ def prioritize(phase_results, ado_data, git_results, config):
 
     # Dirty repos — quick commit opportunity
     for name, scan in git_results.items():
-        if scan is None:
+        if scan is None or scan.get("error"):
             continue
         display = projects.get(name, {}).get("display_name", name)
         if not scan.get("clean", True):
@@ -69,14 +63,6 @@ def prioritize(phase_results, ado_data, git_results, config):
                 "priority_reason": "quick close",
             })
 
-    # PR alerts from ADO as quick closes
-    for alert in ado_data.get("pr_alerts", []):
-        items.append({
-            "text": alert,
-            "source": "ADO",
-            "priority_reason": "quick close - PR",
-        })
-
     # --- Priority 3: In-progress tasks ---
     for name, proj in projects.items():
         display = proj.get("display_name", name)
@@ -88,15 +74,6 @@ def prioritize(phase_results, ado_data, git_results, config):
                         "source": display,
                         "priority_reason": "in-progress task",
                     })
-
-    # ADO focus items
-    for item in ado_data.get("focus_items", []):
-        text = item if isinstance(item, str) else item.get("text", str(item))
-        items.append({
-            "text": text,
-            "source": "ADO",
-            "priority_reason": "ADO focus",
-        })
 
     # --- Priority 4: Not-started phases ---
     for name, proj in projects.items():

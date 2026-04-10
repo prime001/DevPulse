@@ -36,8 +36,11 @@ def scan_project(project_name, project_config):
 
     try:
         repo = Repo(path)
-    except (InvalidGitRepositoryError, NoSuchPathError) as e:
-        result["error"] = str(e)
+    except InvalidGitRepositoryError:
+        result["error"] = "not a git repo"
+        return result
+    except NoSuchPathError:
+        result["error"] = "path not found"
         return result
 
     try:
